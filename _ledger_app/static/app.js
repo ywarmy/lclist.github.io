@@ -306,7 +306,7 @@ async function pageProfit() {
   const rows = [];
   for (const h of HOLDINGS) {
     const pos = posOf(h); if (!pos.complete) continue;
-    let d7 = d30 = null;
+    let d7 = null, d30 = null;
     try {
       const hist = await productHistory(h._code || h._pid, 30);
       if (hist.length) {
