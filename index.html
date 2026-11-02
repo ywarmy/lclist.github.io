@@ -1227,6 +1227,11 @@ window.MULTI_REAL = window.MULTI_REAL || {};
               note: "产品由南银理财发行。南银理财官网（www.nanyinwealth.com）已攻通加密披露接口（ePortal CMS：请求体 AES-128-ECB 加密 + RSA-1024 信封，响应同法解密），可按产品代码直连拉取真实历史净值序列与产品详情（成立日、最短持有天数、风险等级、登记编码）；网商/微众代销的南银份额经 mybank/webank 路由到此通道取数。" }
   };
 
+  // ── 渠道白名单（2026-11-02 用户定稿）：仅保留 工行 / 微众 / 网商 ──
+  // 剪枝而非删除定义，回滚只需删这两行；所有 Object.keys(BANKS) 遍历自动收窄。
+  const BANK_WHITELIST = ["icbc", "webank", "mybank"];
+  for (const k of Object.keys(BANKS)) if (!BANK_WHITELIST.includes(k)) delete BANKS[k];
+
   const TERM_LABEL = {
     daily: "最短持有1天", "7d": "最短持有7天", "14d": "最短持有14天",
     "30d": "最短持有30天", "90d": "最短持有90天", weekly: "每周开放", monthly: "每月开放",

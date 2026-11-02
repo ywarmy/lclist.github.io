@@ -297,6 +297,12 @@ const BANK_FNS = {
   huaxia: W.huaxiaFetch,
 };
 
+// ── 渠道白名单（2026-11-02 用户定稿）：仅保留 工行 / 微众 / 网商 ──
+// mybank/webank 为纯代销平台，worker.js 内部按发行行路由取净值，该路由不经过
+// BANK_FNS，故剪掉其他银行只收紧 /api/fetch 对外端口，不影响代销路由。
+const BANK_WHITELIST = new Set(["icbc", "webank", "mybank"]);
+for (const k of Object.keys(BANK_FNS)) if (!BANK_WHITELIST.has(k)) delete BANK_FNS[k];
+
 // 2026-10-22：清理孤儿 puppeteer 临时 profile。每次无头 Chrome 启动都会在 %TEMP% 生成
 // ~85MB 的 puppeteer_dev_chrome_profile-*；serve 重启/会话关闭后不会自动删除，堆积可占满
 // 系统盘（实测 52 个 / 3.3GB 曾把 C: 写满，node 直接 ENOSPC）。
@@ -489,7 +495,15 @@ const server = http.createServer(async (req, res) => {
     if (!code) return sendJson(res, 400, { error: "missing code" });
     if (!predictBanks) return sendJson(res, 503, { error: "predict module unavailable" });
     try {
-      return sendJson(res, 200, predictBanks(code));
+      const pb = predictBanks(code);
+      // 白名单过滤（2026-11-02）：预判结果只保留 工行/微众/网商
+      const f = (v) => Array.isArray(v)
+        ? v.filter((x) => BANK_WHITELIST.has(typeof x === "string" ? x : x.bank || x.key))
+        : v;
+      if (pb && typeof pb === "object") {
+        for (const k of ["plan", "restKeys", "otherIssuerKeys", "otherAgentKeys"]) if (pb[k]) pb[k] = f(pb[k]);
+      }
+      return sendJson(res, 200, pb);
     } catch (e) {
       return sendJson(res, 500, { error: "predict error: " + e.message });
     }
