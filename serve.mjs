@@ -180,15 +180,19 @@ function writeStateFile(kind, data, stamp) {
 
 // ---- 刷新顺序.xls 自动重建（用户规则 2026-10-13：刷新顺序日志以 .xls 交付，中文不乱码）----
 // CSV 仅作内部追加存储（UTF-8 BOM）；每次追加后防抖 3s 调 Python(xlwt) 全量重建 .xls。
+// macOS/Linux 走 PATH（python3）；Windows 保留原 workbuddy 内置路径。
+// 找不到时 scheduleXlsRebuild 里有兜底（existsSync → python3/python），失败静默不影响主链路。
 const PY_XLS =
-  "C:\\Users\\a\\.workbuddy\\binaries\\python\\envs\\default\\Scripts\\python.exe";
+  process.platform === "win32"
+    ? "C:\\Users\\a\\.workbuddy\\binaries\\python\\envs\\default\\Scripts\\python.exe"
+    : "python3";
 let _xlsTimer = null;
 function scheduleXlsRebuild() {
   if (_xlsTimer) return; // 防抖：3s 内的多次追加只起一次 Python
   _xlsTimer = setTimeout(() => {
     _xlsTimer = null;
     try {
-      const py = fs.existsSync(PY_XLS) ? PY_XLS : "python";
+      const py = fs.existsSync(PY_XLS) ? PY_XLS : (process.platform === "win32" ? "python" : "python3");
       spawn(py, [path.join(ROOT, "refresh_log_xls.py")], { cwd: ROOT, stdio: "ignore" })
         .on("error", () => {});
     } catch (e) { /* 静默：日志转换失败不影响抓取主链路 */ }
@@ -309,10 +313,14 @@ setTimeout(() => {
       const path = await import("node:path");
       const live = new Set();
       try {
-        const ps = execSync(
-          "powershell -NoProfile -Command \"Get-CimInstance Win32_Process -Filter \\\"Name='chrome.exe'\\\" | ForEach-Object { $_.CommandLine }\"",
-          { encoding: "utf8", timeout: 20000, windowsHide: true }
-        );
+        const cmd =
+          process.platform === "win32"
+            ? "powershell -NoProfile -Command \"Get-CimInstance Win32_Process -Filter \\\"Name='chrome.exe'\\\" | ForEach-Object { $_.CommandLine }\""
+            : "ps ax -o command="; // macOS/Linux：一行一进程完整命令行，效果等同
+        const ps = execSync(cmd, {
+          encoding: "utf8", timeout: 20000,
+          ...(process.platform === "win32" ? { windowsHide: true } : {}),
+        });
         for (const m of String(ps).matchAll(/--user-data-dir=([^\s"]+)/g)) live.add(path.basename(m[1]));
       } catch (e) { return; } // 探测失败 → 不删
       const temp = os.tmpdir();
